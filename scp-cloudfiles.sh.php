@@ -3,29 +3,29 @@
 
 /**
  * @file
- * Recursively bulk upload a given directory's entire file contents to a given 
+ * Recursively bulk upload a given directory's entire file contents to a given
  * Rackspace Cloud Files container.
- * 
+ *
  * @author Mike Smullin <mike@smullindesign.com>
  * @license MIT
- * 
+ *
  * Usage:
- *   ./scp-cloudfiles.sh.php <user> <api_key> <container> <path>
+ *   ./scp-cloudfiles.sh.php -u=<user> -k=<api_key> -c=<container> -p=<path>
  */
 
 // initialize
+ini_set('register_globals', 'on');
 error_reporting(E_ALL);
 require_once './php-cloudfiles-1.3.0/cloudfiles.php';
 
 // validate arguments
-$args = array_keys(array_slice($_GET, 1));
-$user = array_shift($args);
-$api_key = array_shift($args);
-$container_name = array_shift($args);
-$path = array_shift($args);
+$user = $_GET['-u'];
+$api_key = $_GET['-k'];
+$container_name = $_GET['-c'];
+$path = $_GET['-p'];
 if (empty($user) || empty($api_key) || empty($container_name) || empty($path)) {
   echo <<<TEXT
-usage: scp-cloudfiles <user> <api_key> <container> <path>
+usage: scp-cloudfiles -u=<user> -k=<api_key> -c=<container> -p=<path>
 scp-cloudfiles command-line client, version 1.0-alpha.
 
 
@@ -35,7 +35,7 @@ TEXT;
 
 /**
  * Flush given output to stdout.
- * 
+ *
  * @param String $s
  *   Text to output stdout.
  * @param Boolean $lb
@@ -46,9 +46,44 @@ function out($s = '', $lb = TRUE) {
   ob_flush();
 }
 
-// @TODO: For ... loop recursively through filesystem $path 
-$path = '/home/mikesmullin/Pictures/';
-$file = '[wallcoo.com]_2880x900_DualScreen_Nature_Wallpaper_263531.jpg';
+/**
+ * List all files in a directory tree.
+ * @author <archipel.gb@online.fr>
+ * @see http://us2.php.net/manual/en/function.opendir.php#83990
+ *
+ * @param String $from
+ *   Filesystem path to start recursing from.
+ * @return Array
+ *   List of all files.
+ */
+function listFiles($from = '.') {
+//   return `find "$from";`;
+  if (!is_dir($from)) {
+    return FALSE;
+  }
+
+  $files = array();
+  $dirs = array($from);
+  while (NULL !== ($dir = array_pop($dirs))) {
+    if ($dh = opendir($dir)) {
+      while (FALSE !== ($file = readdir($dh))) {
+        if ($file == '.' || $file == '..') {
+            continue;
+        }
+        $path = $dir . '/' . $file;
+        if ( is_dir($path)) {
+          $dirs[] = $path;
+        }
+        else {
+          $files[] = $path;
+        }
+      }
+      closedir($dh);
+    }
+  }
+
+  return $files;
+}
 
 # Authenticate to Cloud Files.  The default is to automatically try
 # to re-authenticate if an authentication token expires.
@@ -79,30 +114,40 @@ out('Done.');
 
 out('Getting existing remote Container...', FALSE);
 try {
-  $images = $conn->get_container($container_name);
-} 
+  $container = $conn->get_container($container_name);
+}
 catch (Exception $e) {
   out('Fail! Container does not exist!');
   out('Attempting to automatically create new remote Container...', FALSE);
-  $images = $conn->create_container($container_name);
+  $container = $conn->create_container($container_name);
 }
 out('Done.');
 
-out('Creating a new remote storage Object...', FALSE);
-$bday = $images->create_object($file);
-out('Done.');
-
-out('Uploading content from a local file by convenience function...', FALSE);
-$bday->load_from_filename($path . $file);
-out('Done.');
-
-out('Making uploaded file public...', FALSE);
-$uri = $images->make_public();
-out('Done.');
-
-out('Obtaining public URI for uploaded file...');
-echo "\t". $bday->public_uri() ."\n\n";
-out('Done.');
+foreach (listFiles($path) as $file) {
+  $filepath = dirname($file);
+  $shortpath = basename(str_replace($path, '', $filepath));
+  $filename = basename($file);
+  $object_name = preg_replace('/[^\w\d\.]+/', '_', $shortpath .'_'. $filename);
+  out("Found $filename in ./$shortpath...");
+  
+  out("Creating a new remote storage Object $object_name...", FALSE);
+  $object = $container->create_object($object_name);
+  out('Done.');
+  
+  out('Uploading content from a local file by convenience function...', FALSE);
+  $object->load_from_filename($file);
+  out('Done.');
+  
+  out('Making uploaded file public...', FALSE);
+  $uri = $container->make_public();
+  out('Done.');
+  
+  out('Obtaining public URI for uploaded file...');
+  echo "\t". $object->public_uri() ."\n";
+  out('Done.'."\n");
+  
+  unset($object);
+}
 
 out('Success! Thank you for using this tool.');
 out();
