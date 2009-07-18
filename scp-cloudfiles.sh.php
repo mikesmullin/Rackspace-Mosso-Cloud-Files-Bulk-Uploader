@@ -129,7 +129,9 @@ foreach (listFiles($path) as $file) {
   $filename = basename($file);
   $object_name = preg_replace('/[^\w\d\.]+/', '_', $shortpath .'_'. $filename);
   out("Found $filename in ./$shortpath...");
-  
+
+  // @TODO: Figure out how to use directory separators (/) in the object name. 
+  //        It is possible.
   out("Creating a new remote storage Object $object_name...", FALSE);
   $object = $container->create_object($object_name);
   out('Done.');
