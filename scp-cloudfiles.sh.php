@@ -46,45 +46,6 @@ function out($s = '', $lb = TRUE) {
   ob_flush();
 }
 
-/**
- * List all files in a directory tree.
- * @author <archipel.gb@online.fr>
- * @see http://us2.php.net/manual/en/function.opendir.php#83990
- *
- * @param String $from
- *   Filesystem path to start recursing from.
- * @return Array
- *   List of all files.
- */
-function listFiles($from = '.') {
-//   return `find "$from";`;
-  if (!is_dir($from)) {
-    return FALSE;
-  }
-
-  $files = array();
-  $dirs = array($from);
-  while (NULL !== ($dir = array_pop($dirs))) {
-    if ($dh = opendir($dir)) {
-      while (FALSE !== ($file = readdir($dh))) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $path = $dir . '/' . $file;
-        if ( is_dir($path)) {
-          $dirs[] = $path;
-        }
-        else {
-          $files[] = $path;
-        }
-      }
-      closedir($dh);
-    }
-  }
-
-  return $files;
-}
-
 # Authenticate to Cloud Files.  The default is to automatically try
 # to re-authenticate if an authentication token expires.
 #
@@ -93,7 +54,7 @@ function listFiles($from = '.') {
 #       cURL's web site (http://curl.haxx.se).  To use the newer CA bundle,
 #       call the CF_Authentication instance's 'ssl_use_cabundle()' method.
 #
-out('Initializing new CF_Authentication...', FALSE);
+out(sprintf('Initializing new CF_Authentication as "%s" / "%s"...', $user, $api_key), FALSE);
 $auth = new CF_Authentication($user, $api_key);
 out('Done.');
 
@@ -112,45 +73,55 @@ out('Establishing a new connection to storage system...', FALSE);
 $conn = new CF_Connection($auth);
 out('Done.');
 
-out('Getting existing remote Container...', FALSE);
+out(sprintf('Getting existing remote Container "%s"...', $container_name), FALSE);
 try {
   $container = $conn->get_container($container_name);
 }
 catch (Exception $e) {
   out('Fail! Container does not exist!');
-  out('Attempting to automatically create new remote Container...', FALSE);
-  $container = $conn->create_container($container_name);
+//  out('Attempting to automatically create new remote Container...', FALSE);
+//  $container = $conn->create_container($container_name);
 }
 out('Done.');
 
-foreach (listFiles($path) as $file) {
-  $filepath = dirname($file);
-  $shortpath = basename(str_replace($path, '', $filepath));
-  $filename = basename($file);
-  $object_name = preg_replace('/[^\w\d\.]+/', '_', $shortpath .'_'. $filename);
-  out("Found $filename in ./$shortpath...");
-
-  // @TODO: Figure out how to use directory separators (/) in the object name. 
-  //        It is possible.
-  out("Creating a new remote storage Object $object_name...", FALSE);
-  $object = $container->create_object($object_name);
-  out('Done.');
-  
-  out('Uploading content from a local file by convenience function...', FALSE);
-  $object->load_from_filename($file);
-  out('Done.');
-  
-  out('Making uploaded file public...', FALSE);
-  $uri = $container->make_public();
-  out('Done.');
-  
-  out('Obtaining public URI for uploaded file...');
-  echo "\t". $object->public_uri() ."\n";
-  out('Done.'."\n");
-  
-  unset($object);
+if (is_dir($path)) {
+  $dirs = array($path);
+  while (NULL !== ($dir = array_pop($dirs))) {
+    if ($dh = opendir($dir)) {
+      while (FALSE !== ($_file = readdir($dh))) {
+        if ($_file == '.' || $_file == '..') {
+            continue;
+        }
+        $_path = $dir . '/' . $_file;
+        if (is_dir($_path)) {
+          $dirs[] = $_path;
+        }
+        else {
+          $file = $_path;
+          $object_name = ltrim(str_replace($path, '', $file), '/');
+          
+          out(sprintf('Uploading file "%s"...', $object_name), FALSE);
+          $object = $container->create_object($object_name);
+//          out('Done.');
+          
+//          out('Uploading content from a local file by convenience function...', FALSE);
+          $object->load_from_filename($file);
+          out('Done.');
+          
+        //  out('Making uploaded file public...', FALSE);
+        //  $uri = $container->make_public();
+        //  out('Done.');
+          
+        //  out('Obtaining public URI for uploaded file...');
+        //  echo "\t". $object->public_uri() ."\n";
+        
+//          out('Done.'."\n");
+          unset($object);          
+        }
+      }
+      closedir($dh);
+    }
+  }
 }
 
-out('Success! Thank you for using this tool.');
-out();
-exit;
+exit(0);
