@@ -1,4 +1,4 @@
-#!/usr/bin/php-cgi -q
+#!/usr/bin/php-cgi -q 
 <?php
 
 /**
@@ -6,7 +6,7 @@
  * Recursively bulk upload a given directory's entire file contents to a given
  * Rackspace Cloud Files container.
  *
- * @author Mike Smullin <mike@smullindesign.com>
+ * @author Mike Smullin <mike@smullindesign.com>  
  * @license MIT
  *
  * Usage:
@@ -14,8 +14,9 @@
  */
 
 // initialize
+set_time_limit(0);
 ini_set('register_globals', 'on');
-error_reporting(E_ALL);
+error_reporting(E_ALL & ~E_NOTICE);
 require_once './php-cloudfiles-1.3.0/cloudfiles.php';
 
 // validate arguments
@@ -100,23 +101,27 @@ if (is_dir($path)) {
           $file = $_path;
           $object_name = ltrim(str_replace($path, '', $file), '/');
           
-          out(sprintf('Uploading file "%s"...', $object_name), FALSE);
-          $object = $container->create_object($object_name);
-//          out('Done.');
           
-//          out('Uploading content from a local file by convenience function...', FALSE);
-          $object->load_from_filename($file);
-          out('Done.');
-          
-        //  out('Making uploaded file public...', FALSE);
-        //  $uri = $container->make_public();
-        //  out('Done.');
-          
-        //  out('Obtaining public URI for uploaded file...');
-        //  echo "\t". $object->public_uri() ."\n";
-        
-//          out('Done.'."\n");
-          unset($object);          
+          try {
+            $exists = $container->get_object($object_name);
+            out(sprintf('File "%s" exists',$object_name));
+          } catch (Exception $e) {
+            //out(sprintf('File "%s" DOES NOT exist ... ',$object_name), FALSE);
+            out(sprintf('Uploading file "%s"...', $object_name), FALSE);
+            try {
+                $object = $container->create_object($object_name);
+            } catch (Exception $e) {
+                out('container->create_object Exception: '.$e);
+            }
+            try {
+                $object->load_from_filename($file);
+            } catch (Exception $e) {
+                out('object->load_from_filename $file Exception: '.$e);
+            }
+            out('Done.');
+          }
+         
+        unset($object);          
         }
       }
       closedir($dh);
